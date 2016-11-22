@@ -12,12 +12,12 @@
 * Solving a simple expression tree
 * Dealing with multiple types
 * How to delay evaluation
-* Typechecking (monadic f-algebras)
+* Typechecking (monadic F-Algebras)
 * Translation
 
 ---
 
-Let's take a look at an f-algebra
+Let's take a look at an F-Algebra
 
 ```Haskell
 type Algebra f a = f a -> a
@@ -35,7 +35,10 @@ in a functor!
 For instance consider the following
 
 ```Haskell
-data AddTree a = Add a a | Only a deriving Functor
+data AddTree a
+    = Only a
+    | Add a a
+    deriving (Functor, Show)
 ```
 
 ----
@@ -43,26 +46,44 @@ data AddTree a = Add a a | Only a deriving Functor
 Now we can create an Algebra to do addition
 
 ```Haskell
-data AddTree a = Add a a | Only a deriving Functor
+data AddTree a
+    = Only a
+    | Add a a
+    deriving (Functor, Show)
 
 alg :: Algebra AddTree Int
+alg (Only x)  = x
 alg (Add x y) = x + y
-alg (Only x) = x
 ```
 
-Notice this assumes `Add` has only `Int`'s -- no
-tree structures here!
+Notice this assumes `Add` has only `Int`'s as
+children -- no tree structures here!
 
 ---
 
 Let's create this weird type in our system, the `Fix`
-type and its corresponding `Fx` constructor.
+type and its corresponding `Fx` constructor
 
 ```Haskell
 newtype Fix f = Fx (f (Fix f))
 ```
 
-The type inside the `Fx` constructor is pretty strange.
+The type inside the `Fx` constructor is pretty strange. It
+has itself within itself!
+
+Indeed, the `Fix` type allows us to create trees of functor values.
+
+----
+
+The question boils down to:
+
+Is there some function `g` such that
+
+```Haskell
+g :: Algebra f a -> Fix f -> a
+```
+
+??
 
 ----
 
@@ -70,7 +91,7 @@ The type inside the `Fx` constructor is pretty strange.
 newtype Fix f = Fx (f (Fix f))
 ```
 
-![Fx correspondance graph](./images/fx-graph.png)
+![Fx commutative graph](./images/fx-graph.png)
 
 ----
 
@@ -88,11 +109,11 @@ unFix :: Fix f -> f (Fix f)
 unFix (Fx x) = x
 ```
 
-![unFix correspondance graph](./images/unfix-graph.png)
+![unFix commutative graph](./images/unfix-graph.png)
 
 ----
 
-![unFix correspondance graph](./images/unfix-graph.png)
+![unFix commutative graph](./images/unfix-graph.png)
 
 ```Haskell
 g = alg . fmap g . unFix
@@ -122,6 +143,20 @@ data Ring a
 ```
 
 This type models a value that can be added or subtracted.
+
+----
+
+```Haskell
+data Ring a
+    = Value Int
+    | Add a a
+    | Multiply a a
+    deriving (Show, Functor)
+```
+
+It is important to note that the type `a` that is used for the
+functor is *not* the type of a value held by the expression, but
+the type of the *children* of the expression.
 
 ----
 
@@ -448,7 +483,7 @@ typecheck e = let eq = genTypes [] e
 
 ----
 
-Let's drink a little more of the f-algebra Kool Aid and translate a larger language
+Let's drink a little more of the F-Algebra Kool Aid and translate a larger language
 into a smaller one!
 
 ----
@@ -580,3 +615,20 @@ eval = cata alg
 ---
 
 # That's it!
+
+----
+
+Hopefully I've inspired you to look a bit deeper into
+the type system and what it can do for you!
+
+Perhaps you won't ever use F-Algebras, but if I've done
+my job right, you've seen how a little bit of abstraction
+can really reduce the amount of work you have to do.
+
+---
+
+Credit for the inspiration and starting ideas
+goes to [Bartosz Milewski](https://bartoszmilewski.com/)'s article
+[*Understanding F-Algebras*](https://www.schoolofhaskell.com/user/bartosz/understanding-algebras).
+
+Thanks for the inspiration to go further!
