@@ -5,11 +5,19 @@
 
 ----
 
-TODO: Table Of Contents
+## Overview
+
+* F-Algebras
+* Catamorphisms
+* Solving a simple expression tree
+* Dealing with multiple types
+* How to delay evaluation
+* Typechecking (monadic f-algebras)
+* Translation
 
 ---
 
-Let's take a look at an Algebra
+Let's take a look at an f-algebra
 
 ```Haskell
 type Algebra f a = f a -> a
@@ -18,10 +26,6 @@ type Algebra f a = f a -> a
 What is this doing?
 
 ----
-
-```Haskell
-type Algebra f a = f a -> a
-```
 
 It says how to combine information held
 in a functor!
@@ -102,8 +106,8 @@ Easy
 
 ```Haskell
 alg :: Num a => Algebra Ring Int
-alg (Value x) = x
-alg (Add x y) = x + y
+alg (Value x)      = x
+alg (Add x y)      = x + y
 alg (Multiply x y) = x * y
 
 eval :: Num a => Fix Ring a -> a
@@ -155,10 +159,10 @@ type Result = Maybe (Either Bool Int)
 
 alg :: Algebra Basic Result
 alg (Boolean x) = Just $ Left x
-alg (Value x) = Just $ Right x
-alg (If c x y) = c >>= \e -> case e of
+alg (Value x)   = Just $ Right x
+alg (If c x y)  = c >>= \e -> case e of
     Left b -> if b then x else y
-    _ -> Nothing
+    _      -> Nothing
 
 eval :: Fix Basic -> Result
 eval = cata alg
@@ -196,7 +200,10 @@ lazyUnFix (Fx' x) = x
 And a catamorphism
 
 ```Haskell
-lazyCata :: Functor (f (LazyFix f)) => Algebra (f (LazyFix f)) a -> LazyFix f -> a
+lazyCata :: Functor (f (LazyFix f))
+         => Algebra (f (LazyFix f)) a
+         -> LazyFix f
+         -> a
 lazyCata alg = alg . fmap (lazyCata alg) . lazyUnFix
 ```
 
@@ -216,8 +223,8 @@ very simply
 ```Haskell
 alg :: Algebra (Iffy (LazyFix Iffy)) Bool
 alg (Boolean b) = b
-alg (And x y) = x && y
-alg (If p x y) = eval $ if p then x else y
+alg (And x y)   = x && y
+alg (If p x y)  = eval $ if p then x else y
 
 eval :: LazyFix Iffy -> Bool
 eval = lazyCata alg
@@ -268,7 +275,7 @@ type Type = Integer | Boolean | Arrow Type Type | Var Int
 type Equation = (Type, Type)
 ```
 
-(More on `Var` later) under two rules
+(more on `Var` later) under two rules
 
 1. If `A = B` and `B = C` then `A = C`
 2. If `A -> B = C -> D` then `A = C` and `B = D`.
@@ -319,7 +326,10 @@ And a two new catamorphisms
 mcata :: Functor f => MAlgebra m f a -> Fix f -> m a
 mcata alg = alg . fmap (mcata alg) . unFix
 
-lazyMCata :: Functor (f (LazyFix f)) => MAlgebra m (f (LazyFix f)) a -> LazyFix f -> m a
+lazyMCata :: Functor (f (LazyFix f))
+          => MAlgebra m (f (LazyFix f)) a
+          -> LazyFix f
+          -> m a
 lazyMCata alg = alg . fmap (lazyMCata alg) . lazyUnFix
 ```
 
@@ -344,31 +354,198 @@ newHandle = state (\i -> (i, i + 1))
 Let's define some types for the algebra
 
 ```Haskell
-import Data.Set as Set
-
-type Equations = Set.Set Equation
+type Equations = Set Equation
 type Result = (Type, Equations)
 
-type TypeAlg = MAlgebra Counter (LittleExpr (LazyFix LittleExpr)) Result
+type TypeAlg
+    = MAlgebra Counter (LittleExpr (LazyFix LittleExpr)) Result
+
 type Hypotheses = [(String, Type)]
+```
+
+----
+
+And a helper function for combining sets and equations
+
+```Haskell
+twoAdd :: Equation
+       -> Equation
+       -> Equations
+       -> Equations
+       -> Equations
+twoAdd e e' eq eq' = insert e . insert e' $ union eq eq'
 ```
 
 ----
 
 Now we can define the algebra
 
-```Haskell
-twoAdd :: Equation -> Equation -> Equations -> Equations -> Equations
-twoAdd e e' eq eq' = Set.insert e . Set.insert e' $ Set.union eq eq'
 
+```Haskell
 alg :: Hypotheses -> TypeAlg
-alg g (Value _) = (\_ -> (Integer, Set.empty)) <$> doNothing
-alg g (Add x y) = (\(t, e) (t', e') -> (Integer, twoAdd t t' e e') <$> x <*> y
+alg _ (Value _) = (\_ -> (Integer, empty)) <$> doNothing
+alg _ (Add x y) = (\(t, e) (t', e') -> (Integer, twoAdd t t' e e')
+    <$> x <*> y
 alg g (Lambda n x) = newHandle >>= \v -> let h = Var v
-    in genTypes ((n, h) : g) x >>= \(t, e) -> return (Arrow h t, e)
-alg g (Application x y) = (\v (t, e) (t', e') -> let h = Var v
-    in (h, Set.insert (t, Arrow t' h) $ Set.union e e')) <$> newHandle <*> x <*> y
+    in genTypes ((n, h) : g) x >>= \(t, e) ->
+        return (Arrow h t, e)
+alg _ (Application x y) = (\v (t, e) (t', e') -> let h = Var v
+        in (h, insert (t, Arrow t' h) $ union e e'))
+    <$> newHandle <*> x <*> y
 
 genTypes :: Hypotheses -> TypeAlg
 genTypes h = lazyMCata (alg h)
 ```
+
+----
+
+And our typechecker!
+
+```Haskell
+typecheck :: LazyFix LittleExpr -> Bool
+typecheck e = let eq = genTypes [] e
+    in let c = closure eq
+    in isConsistent c
+
+-- closure and isConsistent are out of the scope of this
+-- presentation.
+```
+
+---
+
+## Great, now I can evaluate a bunch of small languages. How do I do something bigger?
+
+----
+
+Let's drink a little more of the f-algebra Kool Aid and translate a larger language
+a smaller one!
+
+----
+
+Remember that `LittleExpr` language we had earlier?
+
+```Haskell
+data LittleExpr a b
+    = Value Int
+    | Add b b
+    | Lambda String a
+    | Application b b
+    deriving (Functor, Show)
+```
+
+We can actually create `let` definitions of the form
+
+```Haskell
+let f x y z = x + y + z in f 2 3 5
+```
+
+using this language as a base.
+
+----
+
+It's important to note that the `let` definitions cannot be
+recursive in this case.
+
+If we needed recursive functions, we'd need to create an
+additional expression in our `LittleExpr` language.
+
+----
+
+How do we transform this expression?
+
+It's easy to do with a combination of `Lambda`'s and
+`Application`'s.
+
+----
+
+Note that for any expression `e`, we can write the
+function definition
+
+```Haskell
+f x y z = e
+```
+
+as
+
+```Haskell
+f = \x -> \y -> \z -> e
+```
+
+----
+
+Furthermore, note that for any expressions `e`, `e'`
+we can write
+
+```Haskell
+let x = e in e'
+```
+
+as
+
+```Haskell
+(\x -> e') e
+```
+
+----
+
+Then for any expressions `e` and `e'`
+we can write
+
+```Haskell
+let f x y z = e in e'
+```
+
+as
+
+```Haskell
+(\f -> e') (\x -> \y -> \z -> e)
+```
+
+----
+
+Let's define our bigger language as
+
+```Haskell
+data BiggerExpr a
+    = Value Int
+    | Add a a
+    | Lambda String a
+    | Application a a
+    | Let [String] a a
+    deriving (Functor, Show)
+```
+
+----
+
+We can translate the `Let` to `Lambda`'s and
+`Application`'s using
+
+```Haskell
+transform :: [String] -> a -> a -> BiggerExpr a
+transform [] = undefined
+transform (f : xs) e e' = right left
+    where right = Application f e'
+          left  = foldr (\v x -> Lambda x v) e xs
+
+-- (\f -> e') (\x -> \y -> \z -> e)
+```
+
+----
+
+And our algebra is
+
+```Haskell
+alg :: Algebra BiggerExpr LittleExpr
+alg (Value v)         = Value v
+alg (Add x y)         = Add x y
+alg (Lambda x e)      = Lambda x e
+alg (Application f x) = Application f x
+alg (Let xs e e')     = transform xs e e'
+
+eval :: BiggerExpr a -> LittleExpr a
+eval = cata alg
+```
+
+---
+
+# That's it!
