@@ -139,7 +139,7 @@ data Ring a
     = Value Int
     | Add a a
     | Multiply a a
-    deriving (Show, Functor)
+    deriving (Functor, Show)
 ```
 
 This type models a value that can be added or subtracted.
@@ -151,7 +151,7 @@ data Ring a
     = Value Int
     | Add a a
     | Multiply a a
-    deriving (Show, Functor)
+    deriving (Functor, Show)
 ```
 
 It is important to note that the type `a` that is used for the
