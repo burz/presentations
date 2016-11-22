@@ -55,12 +55,22 @@ tree structures here!
 
 ---
 
-Next we create this weird type in our system, the `Fix`
+Let's create this weird type in our system, the `Fix`
 type and its corresponding `Fx` constructor.
 
 ```Haskell
 newtype Fix f = Fx (f (Fix f))
 ```
+
+The type inside the `Fx` constructor is pretty strange.
+
+----
+
+```Haskell
+newtype Fix f = Fx (f (Fix f))
+```
+
+![Fx correspondance graph](./fx-graph.png)
 
 ----
 
@@ -69,6 +79,23 @@ We can also `unFix` a `Fix`'d type
 ```Haskell
 unFix :: Fix f -> f (Fix f)
 unFix (Fx x) = x
+```
+
+----
+
+```Haskell
+unFix :: Fix f -> f (Fix f)
+unFix (Fx x) = x
+```
+
+![unFix correspondance graph](./unfix-graph.png)
+
+----
+
+![unFix correspondance graph](./unfix-graph.png)
+
+```Haskell
+g = alg . fmap g . unFix
 ```
 
 ----
@@ -114,7 +141,12 @@ eval :: Num a => Fix Ring a -> a
 eval = cata alg
 ```
 
+Note that we can assume that the leaf nodes are already
+evaluated.
+
 ----
+
+Now we can evaluate some basic expressions
 
 ```Haskell
 eval $ Fx Value 5 -- => 5
@@ -127,7 +159,7 @@ eval . Fx $ Add (Fx $ Value 3) (Fx $ Value 2)-- => 5
 
 ----
 
-#### Now we need to change our result type
+#### Now we need to change our result type to deal with the possibility of failure
 
 How do we do it?
 
@@ -170,10 +202,9 @@ eval = cata alg
 
 ----
 
-But this means that we always evaluate both sides of the
-`If` statement!
+#### But this means that we always evaluate both sides of the `If` statement!
 
-What if we want to delay evaluation?
+What if we want to delay the evaluation?
 
 ---
 
@@ -418,7 +449,7 @@ typecheck e = let eq = genTypes [] e
 ----
 
 Let's drink a little more of the f-algebra Kool Aid and translate a larger language
-a smaller one!
+into a smaller one!
 
 ----
 
@@ -451,7 +482,7 @@ additional expression in our `LittleExpr` language.
 
 ----
 
-How do we transform this expression?
+#### How do we transform this expression?
 
 It's easy to do with a combination of `Lambda`'s and
 `Application`'s.
