@@ -70,7 +70,7 @@ The type inside the `Fx` constructor is pretty strange.
 newtype Fix f = Fx (f (Fix f))
 ```
 
-![Fx correspondance graph](./fx-graph.png)
+![Fx correspondance graph](./images/fx-graph.png)
 
 ----
 
@@ -88,11 +88,11 @@ unFix :: Fix f -> f (Fix f)
 unFix (Fx x) = x
 ```
 
-![unFix correspondance graph](./unfix-graph.png)
+![unFix correspondance graph](./images/unfix-graph.png)
 
 ----
 
-![unFix correspondance graph](./unfix-graph.png)
+![unFix correspondance graph](./images/unfix-graph.png)
 
 ```Haskell
 g = alg . fmap g . unFix
