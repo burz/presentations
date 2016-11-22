@@ -304,7 +304,8 @@ Consider the follwing type
 
 ```Haskell
 data LittleExpr a b
-    = Value Int
+    = Var String
+    | Value Int
     | Add b b
     | Lambda String a
     | Application b b
@@ -336,7 +337,12 @@ More specifically, we will take the closure of the
 system of equations
 
 ```
-type Type = Integer | Boolean | Arrow Type Type | Var Int
+data Type
+    = Integer
+    | Boolean
+    | Arrow Type Type
+    | Var Int
+    | Undefined String
 
 type Equation = (Type, Type)
 ```
@@ -408,9 +414,6 @@ First let's create a counter to generate type variables
 ```Haskell
 type Counter = State Int
 
-doNothing :: Counter Int
-doNothing = state (\i -> (i, i))
-
 newHandle :: Counter Int
 newHandle = state (\i -> (i, i + 1))
 ```
@@ -431,6 +434,16 @@ type Hypotheses = [(String, Type)]
 
 ----
 
+A way to look up a variable in the hypotheses
+
+```Haskell
+lookup :: String -> Hypoteses -> TypeAlg
+lookup s []             = Undefined s
+lookup s ((s', t) : xs) = if s == s' then t else lookup s xs
+```
+
+----
+
 And a helper function for combining sets and equations
 
 ```Haskell
@@ -446,10 +459,10 @@ twoAdd e e' eq eq' = insert e . insert e' $ union eq eq'
 
 Now we can define the algebra
 
-
 ```Haskell
 alg :: Hypotheses -> TypeAlg
-alg _ (Value _) = (\_ -> (Integer, empty)) <$> doNothing
+alg g (Var s)   = lookup g s
+alg _ (Value _) = return (Integer, empty)
 alg _ (Add x y) = (\(t, e) (t', e') -> (Integer, twoAdd t t' e e')
     <$> x <*> y
 alg g (Lambda n x) = newHandle >>= \v -> let h = Var v
@@ -492,7 +505,8 @@ Remember that `LittleExpr` language we had earlier?
 
 ```Haskell
 data LittleExpr a b
-    = Value Int
+    = Var String
+    | Value Int
     | Add b b
     | Lambda String a
     | Application b b
@@ -573,7 +587,8 @@ Let's define our bigger language as
 
 ```Haskell
 data BiggerExpr a
-    = Value Int
+    = Var String
+    | Value Int
     | Add a a
     | Lambda String a
     | Application a a
@@ -602,6 +617,7 @@ And our algebra is
 
 ```Haskell
 alg :: Algebra BiggerExpr LittleExpr
+alg (Var s)           = Var s
 alg (Value v)         = Value v
 alg (Add x y)         = Add x y
 alg (Lambda x e)      = Lambda x e
