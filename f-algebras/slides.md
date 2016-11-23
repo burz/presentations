@@ -223,14 +223,18 @@ the algebra?
 One simple way could be
 
 ```Haskell
-type Result = Maybe (Either Bool Int)
+data Result
+    = RInteger Int
+    | RBoolean Bool
+    | Failure
+    deriving Show
 
 alg :: Algebra Basic Result
-alg (Boolean x) = Just $ Left x
-alg (Value x)   = Just $ Right x
-alg (If c x y)  = c >>= \e -> case e of
-    Left b -> if b then x else y
-    _      -> Nothing
+alg (Boolean x) = RBoolean x
+alg (Value x)   = RInteger x
+alg (If c x y)  = case c of
+    RBoolean b -> if b then x else y
+    _          -> Failure
 
 eval :: Fix Basic -> Result
 eval = cata alg
