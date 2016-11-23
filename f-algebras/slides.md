@@ -5,6 +5,10 @@
 
 ----
 
+## Goals of this Talk
+
+----
+
 ## Overview
 
 * F-Algebras
@@ -14,6 +18,15 @@
 * How to delay evaluation
 * Typechecking (monadic F-Algebras)
 * Translation
+
+----
+
+The slides (in markdown form) can be found at
+
+[github.com/burz/presentations](https://github.com/burz/presentations)
+
+There is also individual code modules for each example language so
+can play along in `ghci`.
 
 ---
 
