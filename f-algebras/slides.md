@@ -80,7 +80,7 @@ The question boils down to:
 Is there some function `g` such that
 
 ```Haskell
-g :: Algebra f a -> Fix f -> a
+g :: Fix f -> a
 ```
 
 ??
@@ -167,12 +167,12 @@ How can we solve expressions of this type using catamorphisms?
 Easy
 
 ```Haskell
-alg :: Num a => Algebra Ring Int
+alg :: Algebra Ring Int
 alg (Value x)      = x
 alg (Add x y)      = x + y
 alg (Multiply x y) = x * y
 
-eval :: Num a => Fix Ring a -> a
+eval :: Fix Ring -> Int
 eval = cata alg
 ```
 
@@ -184,8 +184,8 @@ evaluated.
 Now we can evaluate some basic expressions
 
 ```Haskell
-eval $ Fx Value 5 -- => 5
-eval . Fx $ Add (Fx $ Value 3) (Fx $ Value 2)-- => 5
+eval . Fx $ Value 5 -- => 5
+eval . Fx $ Add (Fx $ Value 3) (Fx $ Value 2) -- => 5
 ```
 
 ---
@@ -207,6 +207,7 @@ data Basic a
     = Boolean Bool
     | Value Int
     | If a a a
+    deriving (Functor, Show)
 ```
 
 Now we can possibly fail if the
@@ -282,6 +283,7 @@ data Iffy a b
     = Boolean Bool
     | And b b
     | If b a a
+    deriving (Functor, Show)
 ```
 
 very simply
@@ -341,13 +343,14 @@ data Type
     = Integer
     | Boolean
     | Arrow Type Type
-    | Var Int
+    | TypeVar Int
     | Undefined String
+    deriving (Eq, Ord, Show)
 
 type Equation = (Type, Type)
 ```
 
-(more on `Var` later) under two rules
+(more on `TypeVar` later) under two rules
 
 1. If `A = B` and `B = C` then `A = C`
 2. If `A -> B = C -> D` then `A = C` and `B = D`.
@@ -437,9 +440,11 @@ type Hypotheses = [(String, Type)]
 A way to look up a variable in the hypotheses
 
 ```Haskell
-lookup :: String -> Hypoteses -> TypeAlg
-lookup s []             = Undefined s
-lookup s ((s', t) : xs) = if s == s' then t else lookup s xs
+lookupTypeVar :: String -> Hypotheses -> Type
+lookupTypeVar s []             = Undefined s
+lookupTypeVar s ((s', t) : xs) = if s == s'
+    then t
+    else lookupTypeVar s xs
 ```
 
 ----
@@ -461,18 +466,18 @@ Now we can define the algebra
 
 ```Haskell
 alg :: Hypotheses -> TypeAlg
-alg g (Var s)   = lookup g s
+alg g (Var s)   = return (lookupTypeVar s g, empty)
 alg _ (Value _) = return (Integer, empty)
-alg _ (Add x y) = (\(t, e) (t', e') -> (Integer, twoAdd t t' e e')
-    <$> x <*> y
-alg g (Lambda n x) = newHandle >>= \v -> let h = Var v
+alg _ (Add x y) = (\(t, e) (t', e') ->
+    (Integer, twoAdd (Integer, t) (Integer, t') e e')) <$> x <*> y
+alg g (Lambda n x) = newHandle >>= \v -> let h = TypeVar v
     in genTypes ((n, h) : g) x >>= \(t, e) ->
         return (Arrow h t, e)
-alg _ (Application x y) = (\v (t, e) (t', e') -> let h = Var v
+alg _ (Application x y) = (\v (t, e) (t', e') -> let h = TypeVar v
         in (h, insert (t, Arrow t' h) $ union e e'))
     <$> newHandle <*> x <*> y
 
-genTypes :: Hypotheses -> TypeAlg
+genTypes :: Hypotheses -> LazyFix LittleExpr -> Counter Result
 genTypes h = lazyMCata (alg h)
 ```
 
@@ -482,7 +487,7 @@ And our typechecker!
 
 ```Haskell
 typecheck :: LazyFix LittleExpr -> Bool
-typecheck e = let eq = genTypes [] e
+typecheck e = let eq = evalState (genTypes [] e) 0
     in let c = closure eq
     in isConsistent c
 
@@ -587,11 +592,11 @@ Let's define our bigger language as
 
 ```Haskell
 data BiggerExpr a
-    = Var String
-    | Value Int
-    | Add a a
-    | Lambda String a
-    | Application a a
+    = BVar String
+    | BValue Int
+    | BAdd a a
+    | BLambda String a
+    | BApplication a a
     | Let [String] a a
     deriving (Functor, Show)
 ```
@@ -602,11 +607,14 @@ We can translate the `Let` to `Lambda`'s and
 `Application`'s using
 
 ```Haskell
-transform :: [String] -> a -> a -> BiggerExpr a
-transform [] = undefined
-transform (f : xs) e e' = right left
-    where right = Application f e'
-          left  = foldr (\v x -> Lambda x v) e xs
+transform :: [String]
+          -> LazyFix LittleExpr
+          -> LazyFix LittleExpr
+          -> LazyFix LittleExpr
+transform [] _ _        = undefined
+transform (f : xs) e e' = Fx' $ Application right left
+    where right = Fx' $ Lambda f e'
+          left  = foldr (\n -> Fx' . Lambda n) e xs
 
 -- (\f -> e') (\x -> \y -> \z -> e)
 ```
@@ -616,15 +624,15 @@ transform (f : xs) e e' = right left
 And our algebra is
 
 ```Haskell
-alg :: Algebra BiggerExpr LittleExpr
-alg (Var s)           = Var s
-alg (Value v)         = Value v
-alg (Add x y)         = Add x y
-alg (Lambda x e)      = Lambda x e
-alg (Application f x) = Application f x
-alg (Let xs e e')     = transform xs e e'
+alg :: Algebra BiggerExpr (LazyFix LittleExpr)
+alg (BVar s)           = Fx' $ Var s
+alg (BValue v)         = Fx' $ Value v
+alg (BAdd x y)         = Fx' $ Add x y
+alg (BLambda x e)      = Fx' $ Lambda x e
+alg (BApplication f x) = Fx' $ Application f x
+alg (Let xs e e')      = transform xs e e'
 
-eval :: BiggerExpr a -> LittleExpr a
+eval :: Fix BiggerExpr -> LazyFix LittleExpr
 eval = cata alg
 ```
 
